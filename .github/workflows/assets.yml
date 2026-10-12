@@ -1,0 +1,43 @@
+name: assets
+
+on:
+  push:
+    branches: [main]
+    paths: [assets.json, tools/**, .github/workflows/assets.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+
+concurrency:
+  group: assets
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install pillow==12.3.0
+      - name: Download and prepare photos and fonts
+        run: python tools/build_assets.py
+      - name: Commit generated assets
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A -- '*/img/*' '*/fonts/*'
+          if git diff --cached --quiet; then echo "No asset changes"; else git commit -m "Add generated photos and fonts" && git push; fi
+      - name: Enable GitHub Pages (main branch, root) if not already enabled
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh api "repos/${{ github.repository }}/pages" >/dev/null 2>&1; then
+            echo "Pages already enabled"
+          else
+            gh api -X POST "repos/${{ github.repository }}/pages" -f "source[branch]=main" -f "source[path]=/" -f build_type=legacy
+          fi
